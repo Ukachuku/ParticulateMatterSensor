@@ -152,6 +152,7 @@ try:
             st7735.display(img)
             t
 except KeyboardInterrupt:
+    time(5)
     MESSAGE='touch sensor to shutdown; leave alone to exit program. 1 min'
     for j in range(1500):
         proximity = ltr559.get_proximity()
