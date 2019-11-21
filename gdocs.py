@@ -8,7 +8,10 @@ from PIL import ImageDraw
 from PIL import ImageFont
 from time import sleep, time, localtime, strftime
 import ST7735
-import time
+from bme280 import BME280
+from pms5003 import PMS5003, ReadTimeoutError
+from enviroplus import gas
+
 try:
     from ltr559 import LTR559
     ltr559 = LTR559()
@@ -21,7 +24,7 @@ except ImportError:
 import subprocess
 
 
-
+#date data for gdoc
 os.chdir('//home//pi')
 now = datetime.now()
 today = now.strftime('%m/%d/%y %H:%M')
@@ -30,8 +33,13 @@ def next_available_row(worksheet):
     str_list = list(filter(None, worksheet.col_values(1)))
     return str(len(str_list)+1)
 
-import time
-from pms5003 import PMS5003, ReadTimeoutError
+#create BME280 instance
+bme280 = BME280()
+bme280.get_pressure()
+#Read BME280 sensor (humidity, carbon monoxide)
+humidity = bme280.get_humidity()
+pressure = bme280.get_pressure()
+#create PMS instance
 pms5003 = PMS5003()
 try:
     readings=pms5003.read()
@@ -39,6 +47,7 @@ try:
 except ReadTimeoutError:
     pms5003=PMS5003()
     readings=pms5003.read()
+    #LCD instance
     MESSAGE = 'Starting Program'
     st7735 = ST7735.ST7735(port=0, cs=1, dc=9, backlight=12, rotation=270, spi_speed_hz=10000000)
     st7735.begin()
@@ -62,6 +71,7 @@ except ReadTimeoutError:
         draw.text((int(text_x - x), text_y), MESSAGE, font=font, fill=(255, 255, 255))
         st7735.display(img)
         i
+    #attain individual pm sensor data    
     pm2p5=readings.pm_ug_per_m3(2.5,atmospheric_environment=True)
     pm1=readings.pm_ug_per_m3(1.0,atmospheric_environment=True)
     pm10=readings.pm_ug_per_m3(None,atmospheric_environment=True)
@@ -73,9 +83,11 @@ except ReadTimeoutError:
     s5= readings.pm_per_1l_air(5)
     s10= readings.pm_per_1l_air(10)
     
+    #authenticate through json and enabling the api
     scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
     credentials = ServiceAccountCredentials.from_json_keyfile_name('pmssensor-3f63bc6a6dbf.json', scope)
     gc = gspread.authorize(credentials)
+    #pipe data to worksheet
     wks = gc.open("PMSReadings")
     worksheet = wks.get_worksheet(0)
     next_row = next_available_row(worksheet)
@@ -89,7 +101,10 @@ except ReadTimeoutError:
     worksheet.update_acell("H{}".format(next_row), s2p5)
     worksheet.update_acell("I{}".format(next_row), s5)
     worksheet.update_acell("J{}".format(next_row), s10)
+    worksheet.update_acell("K{}".format(next_row), humidity)
+    worksheet.update_acell("L{}".format(next_row), pressure)
 except:
+    #if failed connection to Google Docs
     MESSAGE = 'Failed to connect GDocs'
     for i in range(210):
         proximity = ltr559.get_proximity()
@@ -105,6 +120,7 @@ except:
 
 try:
     while True:
+        #Display sensor data to LCD
         readings=pms5003.read()
         pm2p5=readings.pm_ug_per_m3(2.5,atmospheric_environment=True)
         pm1=readings.pm_ug_per_m3(1.0,atmospheric_environment=True)
@@ -140,6 +156,7 @@ try:
                 draw.text((int(text_x - x), text_y), MESSAGE, font=font, fill=(255, 255, 255))
                 st7735.display(img)
                 i
+        #stop loop
         MESSAGE='touch sensor to stop loop. 1 min loop'
         for t in range(1500):
             proximity = ltr559.get_proximity()
@@ -152,7 +169,8 @@ try:
             st7735.display(img)
             t
 except KeyboardInterrupt:
-    time(5)
+    #option to end the program if left alone or shutdown entire OS if light sensor is touched
+    time.sleep(5)
     MESSAGE='touch sensor to shutdown; leave alone to exit program. 1 min'
     for j in range(1500):
         proximity = ltr559.get_proximity()
