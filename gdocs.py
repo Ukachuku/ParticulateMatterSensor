@@ -157,6 +157,7 @@ except KeyboardInterrupt:
     for j in range(1500):
         proximity = ltr559.get_proximity()
         if proximity > 1500:
+            pms5003.reset()
             subprocess.Popen(['sudo', 'shutdown', '-h', 'now'])
         x=(time.time() - t_start) * 100
         x %= (size_x + 1000)
